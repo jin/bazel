@@ -40,16 +40,18 @@
 MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2"
 
 # Binary dependencies needed for running the bash commands
-DEPS = ["mvn", "openssl", "awk"]
+DEPS = [
+    "mvn",
+    "openssl",
+    "awk",
+]
 
 MVN_PLUGIN = "org.apache.maven.plugins:maven-dependency-plugin:2.10"
-
 
 def _execute(ctx, command):
   return ctx.execute(["bash", "-c", """
 set -ex
 %s""" % command])
-
 
 # Fail fast
 def _check_dependencies(ctx):
@@ -57,16 +59,13 @@ def _check_dependencies(ctx):
     if ctx.which(dep) == None:
       fail("%s requires %s as a dependency. Please check your PATH." % (ctx.name, dep))
 
-
 def _validate_attr(ctx):
   if hasattr(ctx.attr, "server") and (ctx.attr.server != None):
     fail("%s specifies a 'server' attribute which is currently not supported." % ctx.name)
 
-
 def _artifact_dir(coordinates):
   return "/".join(coordinates.group_id.split(".") +
                   [coordinates.artifact_id, coordinates.version])
-
 
 # Creates a struct containing the different parts of an artifact's FQN.
 # If the fully_qualified_name does not specify a packaging and the rule does
@@ -95,7 +94,6 @@ def _create_coordinates(fully_qualified_name, packaging="jar"):
       classifier = classifier,
       version = version,
   )
-
 
 # NOTE: Please use this method to define ALL paths that the maven_*
 # rules use. Doing otherwise will lead to inconsistencies and/or errors.
@@ -185,10 +183,8 @@ def _generate_build_file(ctx, template, paths):
       deps_string = deps_string)
   ctx.file('%s/BUILD' % paths.symlink_dir, contents, False)
 
-
 def _file_exists(ctx, filename):
   return _execute(ctx, "[[ -f %s ]] && exit 0 || exit 1" % filename).return_code == 0
-
 
 # Constructs the maven command to retrieve the dependencies from remote
 # repositories using the dependency plugin, and executes it.
@@ -218,7 +214,6 @@ def _mvn_download(ctx, paths, fully_qualified_name):
   if exec_result.return_code != 0:
     fail("%s\n%s\nFailed to fetch Maven dependency" % (exec_result.stdout, exec_result.stderr))
 
-
 def _check_sha1(ctx, paths, sha1):
   actual_sha1 = _execute(ctx, "openssl sha1 %s | awk '{printf $2}'" % paths.artifact_path).stdout
 
@@ -230,7 +225,6 @@ def _check_sha1(ctx, paths, sha1):
               actual_sha1 = actual_sha1))
   else:
     _execute(ctx, "echo %s %s > %s" % (sha1, paths.artifact_path, paths.sha1_path))
-
 
 def _maven_artifact_impl(ctx, default_rule_packaging, build_file_template):
   # Ensure that we have all of the dependencies installed
@@ -270,7 +264,6 @@ def _maven_artifact_impl(ctx, default_rule_packaging, build_file_template):
 
   ctx.symlink(paths.artifact_path, paths.symlink_artifact_path)
 
-
 _common_maven_rule_attrs = {
     "artifact": attr.string(
         default = "",
@@ -287,26 +280,24 @@ _common_maven_rule_attrs = {
 def _maven_jar_impl(ctx):
   _maven_artifact_impl(ctx, "jar", _maven_jar_build_file_template)
 
-
 def _maven_aar_impl(ctx):
   _maven_artifact_impl(ctx, "aar", _maven_aar_build_file_template)
 
 maven_jar = repository_rule(
-    implementation = _maven_jar_impl,
-    attrs = dict(_common_maven_rule_attrs.items() + {
+    attrs = dict(_common_maven_rule_attrs.items().update({
         # Needed for compatability reasons with the native maven_jar rule.
         "repository": attr.string(default = ""),
         "server": attr.label(default = None),
-    }.items()),
-    local=False,
+    }.items())),
+    local = False,
+    implementation = _maven_jar_impl,
 )
 
 maven_aar = repository_rule(
-    implementation=_maven_aar_impl,
-    attrs=_common_maven_rule_attrs,
-    local=False,
+    attrs = _common_maven_rule_attrs,
+    local = False,
+    implementation = _maven_aar_impl,
 )
-
 
 def _maven_dependency_plugin_impl(ctx):
   _BUILD_FILE = """
@@ -352,11 +343,9 @@ filegroup(
   if exec_result.return_code != 0:
     fail("%s\nFailed to fetch Maven dependency" % exec_result.stderr)
 
-
 _maven_dependency_plugin = repository_rule(
-    implementation=_maven_dependency_plugin_impl,
+    implementation = _maven_dependency_plugin_impl,
 )
-
 
 def maven_dependency_plugin():
   _maven_dependency_plugin(name = "m2")
