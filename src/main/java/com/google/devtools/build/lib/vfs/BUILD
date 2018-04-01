@@ -11,7 +11,6 @@ PATH_FRAGMENT_SOURCES = [
     "PathFragmentSerializationProxy.java",
     "OsPathPolicy.java",
     "UnixOsPathPolicy.java",
-    "WindowsOsPathPolicy.java",
 ]
 
 java_library(
@@ -24,8 +23,6 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib:skylarkinterface",
         "//src/main/java/com/google/devtools/build/lib/actions:commandline_item",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/autocodec",
-        "//src/main/java/com/google/devtools/build/lib/windows:windows_short_path",
-        "//src/main/java/com/google/devtools/build/lib/windows/jni",
         "//third_party:guava",
     ],
 )

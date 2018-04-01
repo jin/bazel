@@ -1,6 +1,0 @@
-*.nupkg
-*.zip
-bazel.nuspec
-tools/*.exe
-tools/LICENSE*
-tools/params.txt

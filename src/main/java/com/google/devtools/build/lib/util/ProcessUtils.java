@@ -15,7 +15,6 @@
 package com.google.devtools.build.lib.util;
 
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ThreadSafe;
-import com.google.devtools.build.lib.windows.jni.WindowsProcesses;
 
 /**
  * OS Process related utilities.
@@ -41,11 +40,7 @@ public final class ProcessUtils {
    * @return the process ID of this process.
    */
   public static int getpid() {
-    if (OS.getCurrent() == OS.WINDOWS) {
-      return WindowsProcesses.getpid();
-    } else {
       return com.google.devtools.build.lib.unix.ProcessUtils.getpid();
-    }
   }
 
   /**

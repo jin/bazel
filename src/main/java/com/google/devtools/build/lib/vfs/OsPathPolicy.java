@@ -93,8 +93,6 @@ public interface OsPathPolicy {
         // NOTE: We *should* return a path policy that is case insensitive,
         // but we currently don't handle this
         return UnixOsPathPolicy.INSTANCE;
-      case WINDOWS:
-        return WindowsOsPathPolicy.INSTANCE;
       default:
         throw new AssertionError("Not covering all OSs");
     }

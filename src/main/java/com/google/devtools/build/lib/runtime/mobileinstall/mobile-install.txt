@@ -1,6 +1,0 @@
-
-Usage: %{product} %{command} <options> <target>
-
-Installs a target to an Android device. Currently experimental.
-
-%{options}

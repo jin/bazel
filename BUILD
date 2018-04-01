@@ -15,9 +15,7 @@ filegroup(
             ".*",  # mainly .git* files
         ],
     ) + [
-        "//examples:srcs",
         "//scripts:srcs",
-        "//site:srcs",
         "//src:srcs",
         "//tools:srcs",
         "//third_party:srcs",

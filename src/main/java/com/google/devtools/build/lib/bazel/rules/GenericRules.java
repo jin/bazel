@@ -21,7 +21,6 @@ import com.google.devtools.build.lib.bazel.rules.common.BazelFilegroupRule;
 import com.google.devtools.build.lib.rules.Alias.AliasRule;
 import com.google.devtools.build.lib.rules.core.CoreRules;
 import com.google.devtools.build.lib.rules.genquery.GenQueryRule;
-import com.google.devtools.build.lib.rules.test.TestSuiteRule;
 import com.google.devtools.build.lib.util.ResourceFileLoader;
 import java.io.IOException;
 
@@ -41,7 +40,6 @@ public class GenericRules implements RuleSet {
 
     builder.addRuleDefinition(new AliasRule());
     builder.addRuleDefinition(new BazelFilegroupRule());
-    builder.addRuleDefinition(new TestSuiteRule());
     builder.addRuleDefinition(new GenQueryRule());
 
     try {

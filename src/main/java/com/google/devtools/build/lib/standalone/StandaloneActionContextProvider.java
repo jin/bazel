@@ -30,7 +30,6 @@ import com.google.devtools.build.lib.exec.local.LocalSpawnRunner;
 import com.google.devtools.build.lib.exec.local.PosixLocalEnvProvider;
 import com.google.devtools.build.lib.exec.local.WindowsLocalEnvProvider;
 import com.google.devtools.build.lib.rules.cpp.SpawnGccStrategy;
-import com.google.devtools.build.lib.rules.test.ExclusiveTestStrategy;
 import com.google.devtools.build.lib.runtime.CommandEnvironment;
 import com.google.devtools.build.lib.util.OS;
 import com.google.devtools.build.lib.vfs.Path;
@@ -63,7 +62,6 @@ public class StandaloneActionContextProvider extends ActionContextProvider {
         new StandaloneSpawnStrategy(env.getExecRoot(), createLocalRunner(env)),
         new SpawnGccStrategy(),
         testStrategy,
-        new ExclusiveTestStrategy(testStrategy),
         new FileWriteStrategy());
   }
 

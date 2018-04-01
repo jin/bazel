@@ -45,7 +45,6 @@ import com.google.devtools.build.lib.collect.nestedset.Order;
 import com.google.devtools.build.lib.packages.TargetUtils;
 import com.google.devtools.build.lib.rules.cpp.CcCommon.CcFlagsSupplier;
 import com.google.devtools.build.lib.rules.cpp.CppHelper;
-import com.google.devtools.build.lib.rules.java.JavaRuntimeInfo;
 import com.google.devtools.build.lib.syntax.Type;
 import com.google.devtools.build.lib.util.LazyString;
 import com.google.devtools.build.lib.vfs.PathFragment;
@@ -204,11 +203,6 @@ public abstract class GenRuleBase implements RuleConfiguredTargetFactory {
       inputs.addTransitive(
           CppHelper.getToolchainUsingDefaultCcToolchainAttribute(ruleContext)
               .getCrosstoolMiddleman());
-    }
-    if (requiresJdk(baseCommand)) {
-      // If javac is used, silently throw in the jdk filegroup as a dependency.
-      // Note we expand Java-related variables with the *host* configuration.
-      inputs.addTransitive(JavaRuntimeInfo.forHost(ruleContext).javaBaseInputsMiddleman());
     }
 
     if (isStampingEnabled(ruleContext)) {

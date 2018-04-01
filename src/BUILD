@@ -60,8 +60,6 @@ OSX_DUMMY_TARGETS = [
     "src/tools/xcode/ibtoolwrapper/ibtoolwrapper",
     "src/tools/xcode/momcwrapper/momcwrapper",
     "src/tools/xcode/swiftstdlibtoolwrapper/swiftstdlibtoolwrapper",
-    "src/objc_tools/bundlemerge/bundlemerge_deploy.jar",
-    "src/objc_tools/plmerge/plmerge_deploy.jar",
     "src/tools/xcode/realpath/realpath",
     "src/tools/xcode/stdredirect/StdRedirect.dylib",
 ]
@@ -79,12 +77,6 @@ OSX_DUMMY_TARGETS = [
 filegroup(
     name = "darwin_tools",
     srcs = [
-        "//src/tools/xcode/actoolwrapper:actoolwrapper",
-        "//src/tools/xcode/ibtoolwrapper:ibtoolwrapper",
-        "//src/tools/xcode/momcwrapper:momcwrapper",
-        "//src/tools/xcode/swiftstdlibtoolwrapper:swiftstdlibtoolwrapper",
-        "//src/objc_tools/bundlemerge:bundlemerge_deploy.jar",
-        "//src/objc_tools/plmerge:plmerge_deploy.jar",
         "//src/tools/xcode/realpath:realpath",
         "//tools/osx:xcode_locator.m",
     ] + select({
@@ -121,36 +113,10 @@ py_binary(
         "BUILD.tools",
         "//tools:embedded_tools_srcs",
         "//third_party:gpl-srcs",
-        "//third_party/java/j2objc:embedded_tools_srcs",
-        "//third_party/java/jarjar:embedded_tools_srcs",
-        "//third_party/java/jdk/langtools:test-srcs",
-        "//third_party/java/proguard:embedded_tools",
-        "//third_party/py/concurrent:srcs",
-        "//third_party/py/gflags:srcs",
-        "//third_party/py/six:srcs",
         "//src/conditions:embedded_tools",
-        "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/jarhelper:srcs",
-        "//src/tools/android/java/com/google/devtools/build/android:embedded_tools",
-        "//src/tools/launcher:srcs",
         "//src/tools/runfiles:embedded_tools",
-        "//src/tools/singlejar:embedded_tools",
         "//src/main/cpp/util:embedded_tools",
-        "//src/main/native:embedded_tools",
         "//src/main/protobuf:srcs",
-        "//src/java_tools/buildjar:JavaBuilderDeploy",
-        "//src/java_tools/buildjar:VanillaJavaBuilder_deploy.jar",
-        "//src/java_tools/buildjar/java/com/google/devtools/build/buildjar/genclass:GenClass_deploy.jar",
-        "//src/java_tools/import_deps_checker/java/com/google/devtools/build/importdeps:embedded_tools",
-        "//src/java_tools/junitrunner/java/com/google/testing/junit/runner:Runner_deploy.jar",
-        "//src/java_tools/junitrunner/java/com/google/testing/junit/runner:ExperimentalRunner_deploy.jar",
-        "//src/java_tools/junitrunner/java/com/google/testing/coverage:embedded_tools",
-        "//third_party/def_parser:srcs",
-        "//third_party/ijar",
-        "//third_party/ijar:zipper",
-        "//third_party/ijar:embedded_tools",
-        "//src/java_tools/buildjar/java/com/google/devtools/build/java/turbine:turbine_deploy.jar",
-        "//third_party/java/jacoco:srcs",
-        "//third_party/zlib:embedded_tools",
     ] + select({
         "//src/conditions:darwin": [
             ":darwin_tools",
@@ -160,20 +126,6 @@ py_binary(
         ],
         "//conditions:default": [
             ":dummy_darwin_tools",
-        ],
-    }) + select({
-        # TODO(bazel-team): Once https://github.com/bazelbuild/bazel/issues/2241
-        # is resolved, use cc implementation of singlejar on windows
-        "//src/conditions:windows": [
-            "//src/java_tools/singlejar:SingleJar_deploy.jar",
-            "//src/tools/launcher:launcher",
-            "//third_party/def_parser:def_parser",
-        ],
-        "//src/conditions:arm": [
-            "//src/java_tools/singlejar:SingleJar_deploy.jar",
-        ],
-        "//conditions:default": [
-            "//src/tools/singlejar:singlejar",
         ],
     }) + (select({
         "//src/conditions:darwin": [
@@ -239,7 +191,6 @@ genrule(
         ":libunix",
         "//src/main/tools:build-runfiles",
         "//src/main/tools:process-wrapper",
-        "//src/main/tools:jdk-support",
         "//src/main/tools:linux-sandbox",
         "//tools/osx:xcode-locator",
     ],

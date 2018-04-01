@@ -7,7 +7,6 @@ exports_files(["test_sharding_compliant"])
 filegroup(
     name = "srcs",
     srcs = glob(["**"]) + [
-        "//tools/android:srcs",
         "//tools/bash:srcs",
         "//tools/buildstamp:srcs",
         "//tools/build_defs/apple:srcs",
@@ -39,7 +38,6 @@ filegroup(
 filegroup(
     name = "embedded_tools_srcs",
     srcs = glob(["**"]) + [
-        "//tools/android:embedded_tools",
         "//tools/bash:embedded_tools",
         "//tools/build_defs/apple:srcs",
         "//tools/build_defs/hash:srcs",
@@ -50,9 +48,6 @@ filegroup(
         "//tools/coverage:srcs",
         "//tools/cpp:srcs",
         "//tools/genrule:srcs",
-        "//tools/j2objc:srcs",
-        "//tools/jdk:package-srcs",
-        "//tools/jdk:srcs",
         "//tools/launcher:srcs",
         "//tools/def_parser:srcs",
         "//tools/platforms:srcs",
