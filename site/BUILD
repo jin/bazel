@@ -146,8 +146,23 @@ genrule(
     ],
 )
 
+
+filegroup(
+    name = "versioned_docs",
+    srcs = [
+        "@jekyll_tree_0_17_1//file",
+        "@jekyll_tree_0_17_2//file",
+        "@jekyll_tree_0_18_1//file",
+        "@jekyll_tree_0_19_1//file",
+        "@jekyll_tree_0_19_2//file",
+    ]
+)
+
 jekyll_build(
     name = "site",
-    srcs = [":jekyll-tree"],
+    srcs = [
+        ":versioned_docs",
+        ":jekyll-tree",
+    ],
     bucket = "docs.bazel.build",
 )

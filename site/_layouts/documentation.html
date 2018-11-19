@@ -267,6 +267,18 @@ nav: docs
             }
           </script>
 
+          <!-- /versions/master/foo/bar -> ["master", "foo", "bar"] -->
+          <!-- /versions/0.12.3/baz.md -> ["0.12.3", "baz.md"] -->
+          {% assign versioned_url_parts = page.url | split: '/' | shift | shift  %}
+
+          <p>Documentation for Bazel {{ versioned_url_parts.first }}</p>
+          <select id="touchsplashmenu" onchange="location.href=this.value">
+              <option value="">Choose a Bazel version</option>
+              {% for doc_version in site.doc_versions %}
+              <option value="/{{versioned_url_parts | shift | unshift: doc_version | unshift: 'versions' | join: '/' }}">{{ doc_version }}</option>
+              {% endfor %}
+          </select>
+
           {{ content }}
         </div>
       </div>
