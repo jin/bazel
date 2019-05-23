@@ -48,8 +48,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 [![Build status](https://badge.buildkite.com/1fd282f8ad98c3fb10758a821e5313576356709dd7d11e9618.svg?status=master)](https://ci.bazel.build)
 
-Join the Slack community: <img src="https://slack.bazel.build/badge.svg">
-
+<img alt="Bazel Slack community" src="https://slack.bazel.build/badge.svg">
 
 Bazel is released in 'Beta'.
 See the [product roadmap](https://bazel.build/roadmap.html) to learn about the
