@@ -78,6 +78,12 @@ public interface SkylarkRepositoryContextApi<RepositoryFunctionExceptionT extend
   public RepositoryPathApi<?> path(Object path) throws EvalException, InterruptedException;
 
   @SkylarkCallable(
+      name = "workspace_directory",
+      doc = "Returns the workspace directory."
+  )
+  public RepositoryPathApi<?> getWorkspaceDirectory() throws EvalException, InterruptedException;
+
+  @SkylarkCallable(
       name = "report_progress",
       doc = "Updates the progress status for the fetching of this repository",
       parameters = {

@@ -176,6 +176,11 @@ public class SkylarkRepositoryContext
   }
 
   @Override
+  public SkylarkPath getWorkspaceDirectory() throws InterruptedException, EvalException {
+    return path(packageLocator.getWorkspaceFile().getParentDirectory());
+  }
+
+  @Override
   public SkylarkPath path(Object path) throws EvalException, InterruptedException {
     return getPath("path()", path);
   }
