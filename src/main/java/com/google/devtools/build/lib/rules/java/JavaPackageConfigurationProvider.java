@@ -20,6 +20,7 @@ import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.analysis.PackageSpecificationProvider;
 import com.google.devtools.build.lib.analysis.TransitiveInfoProvider;
 import com.google.devtools.build.lib.cmdline.Label;
+import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.Immutable;
 import com.google.devtools.build.lib.packages.PackageSpecification.PackageGroupContents;
@@ -56,7 +57,7 @@ public abstract class JavaPackageConfigurationProvider implements TransitiveInfo
     // Do not use streams here as they create excessive garbage.
     for (PackageSpecificationProvider provider : packageSpecifications()) {
       for (PackageGroupContents specifications : provider.getPackageSpecifications()) {
-        if (specifications.containsPackage(label.getPackageIdentifier())) {
+        if (label.getPackageIdentifier().getRepository() != RepositoryName.MAIN || specifications.containsPackage(label.getPackageIdentifier())) {
           return true;
         }
       }
