@@ -54,14 +54,15 @@ public abstract class JavaPackageConfigurationProvider implements TransitiveInfo
    * is contained by any of the {@link #packageSpecifications}.
    */
   public boolean matches(Label label) {
+    return true;
     // Do not use streams here as they create excessive garbage.
-    for (PackageSpecificationProvider provider : packageSpecifications()) {
-      for (PackageGroupContents specifications : provider.getPackageSpecifications()) {
-        if (label.getPackageIdentifier().getRepository() != RepositoryName.MAIN || specifications.containsPackage(label.getPackageIdentifier())) {
-          return true;
-        }
-      }
-    }
-    return false;
+//    for (PackageSpecificationProvider provider : packageSpecifications()) {
+//      for (PackageGroupContents specifications : provider.getPackageSpecifications()) {
+//        if (label.getPackageIdentifier().getRepository() != RepositoryName.MAIN || specifications.containsPackage(label.getPackageIdentifier())) {
+//          return true;
+//        }
+//      }
+//    }
+//    return false;
   }
 }
