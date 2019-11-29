@@ -18,6 +18,8 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 
 import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.lib.cmdline.Label;
+import com.google.devtools.build.lib.cmdline.LabelSyntaxException;
+import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.EventHandler;
 import com.google.devtools.build.lib.events.Location;
@@ -47,20 +49,25 @@ public class PackageGroup implements Target {
       Collection<String> packageSpecifications,
       Collection<Label> includes,
       EventHandler eventHandler,
-      Location location) {
+      Location location) throws LabelSyntaxException {
     this.label = label;
     this.location = location;
     this.containingPackage = pkg;
     this.includes = ImmutableList.copyOf(includes);
 
-    // TODO(bazel-team): Consider refactoring so constructor takes a PackageGroupContents. 
+    // TODO(bazel-team): Consider refactoring so constructor takes a PackageGroupContents.
     ImmutableList.Builder<PackageSpecification> packagesBuilder = ImmutableList.builder();
     for (String packageSpecification : packageSpecifications) {
       PackageSpecification specification = null;
+      RepositoryName repositoryName = label.getPackageIdentifier().getRepository();
+
+      if (packageSpecification.startsWith("@") && !packageSpecification.startsWith("@//")) {
+        repositoryName = RepositoryName.create(packageSpecification.split("//")[0]);
+      }
+
       try {
         specification =
-            PackageSpecification.fromString(
-                label.getPackageIdentifier().getRepository(), packageSpecification);
+            PackageSpecification.fromString(repositoryName, packageSpecification);
       } catch (PackageSpecification.InvalidPackageSpecificationException e) {
         containsErrors = true;
         eventHandler.handle(Event.error(location, e.getMessage()));
