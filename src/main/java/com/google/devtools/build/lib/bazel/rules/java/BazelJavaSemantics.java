@@ -72,6 +72,7 @@ import com.google.devtools.build.lib.util.OS;
 import com.google.devtools.build.lib.util.Pair;
 import com.google.devtools.build.lib.util.ShellEscaper;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
+import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import java.io.File;
 import java.util.ArrayList;
@@ -217,8 +218,7 @@ public class BazelJavaSemantics implements JavaSemantics {
         }
         if (!isRunfilesEnabled) {
           buffer.append("$(rlocation ");
-          PathFragment runfilePath =
-              PathFragment.create(workspacePrefix).getRelative(artifact.getRunfilesPath());
+          PathFragment runfilePath = artifact.getRunfilesPath();
           buffer.append(runfilePath.getPathString());
           buffer.append(")");
         } else {

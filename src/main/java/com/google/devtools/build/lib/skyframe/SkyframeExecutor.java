@@ -93,6 +93,7 @@ import com.google.devtools.build.lib.analysis.skylark.StarlarkTransition;
 import com.google.devtools.build.lib.analysis.skylark.StarlarkTransition.TransitionException;
 import com.google.devtools.build.lib.buildtool.BuildRequestOptions;
 import com.google.devtools.build.lib.cmdline.Label;
+import com.google.devtools.build.lib.cmdline.LabelConstants;
 import com.google.devtools.build.lib.cmdline.LabelSyntaxException;
 import com.google.devtools.build.lib.cmdline.PackageIdentifier;
 import com.google.devtools.build.lib.cmdline.RepositoryName;
@@ -1152,63 +1153,6 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
     return ImmutableList.of(value.getStableArtifact(), value.getVolatileArtifact());
   }
 
-  public Map<PathFragment, Root> getArtifactRootsForFiles(
-      final ExtendedEventHandler eventHandler, Iterable<PathFragment> execPaths)
-      throws InterruptedException {
-    return getArtifactRoots(eventHandler, execPaths, true);
-  }
-
-  public Map<PathFragment, Root> getArtifactRoots(
-      final ExtendedEventHandler eventHandler, Iterable<PathFragment> execPaths)
-      throws InterruptedException {
-    return getArtifactRoots(eventHandler, execPaths, false);
-  }
-
-  private Map<PathFragment, Root> getArtifactRoots(
-      final ExtendedEventHandler eventHandler, Iterable<PathFragment> execPaths, boolean forFiles)
-      throws InterruptedException {
-    final Map<PathFragment, SkyKey> packageKeys = new HashMap<>();
-    for (PathFragment execPath : execPaths) {
-      try {
-        PackageIdentifier pkgIdentifier =
-            PackageIdentifier.discoverFromExecPath(execPath, forFiles);
-        packageKeys.put(execPath, ContainingPackageLookupValue.key(pkgIdentifier));
-      } catch (LabelSyntaxException e) {
-        continue;
-      }
-    }
-
-    EvaluationResult<ContainingPackageLookupValue> result;
-    EvaluationContext evaluationContext =
-        EvaluationContext.newBuilder()
-            .setKeepGoing(true)
-            .setNumThreads(1)
-            .setEventHander(eventHandler)
-            .build();
-    synchronized (valueLookupLock) {
-      result = buildDriver.evaluate(packageKeys.values(), evaluationContext);
-    }
-
-    if (result.hasError()) {
-      return new HashMap<>();
-    }
-
-    Map<PathFragment, Root> roots = new HashMap<>();
-    for (PathFragment execPath : execPaths) {
-      ContainingPackageLookupValue value = result.get(packageKeys.get(execPath));
-      if (value.hasContainingPackage()) {
-        roots.put(
-            execPath,
-            maybeTransformRootForRepository(
-                value.getContainingPackageRoot(),
-                value.getContainingPackageName().getRepository()));
-      } else {
-        roots.put(execPath, null);
-      }
-    }
-    return roots;
-  }
-
   // This must always be consistent with Package.getSourceRoot; otherwise computing source roots
   // from exec paths does not work, which can break the action cache for input-discovering actions.
   static Root maybeTransformRootForRepository(Root packageRoot, RepositoryName repository) {
@@ -1420,16 +1364,18 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
 
   protected ImmutableMap<Root, ArtifactRoot> createSourceArtifactRootMapOnNewPkgLocator(
       PathPackageLocator oldLocator, PathPackageLocator pkgLocator) {
-    // TODO(bazel-team): The output base is a legitimate "source root" because external repositories
-    // stage their sources under output_base/external. The root here should really be
-    // output_base/external, but for some reason it isn't.
-    return Stream.concat(
-            pkgLocator.getPathEntries().stream(),
-            Stream.of(Root.absoluteRoot(fileSystem), Root.fromPath(directories.getOutputBase())))
-        .distinct()
-        .collect(
-            ImmutableMap.toImmutableMap(
-                java.util.function.Function.identity(), ArtifactRoot::asSourceRoot));
+    Root externalRoot = Root.fromPath(
+        directories.getOutputBase().getRelative(LabelConstants.EXTERNAL_PATH_PREFIX));
+    Root absoluteRoot = Root.absoluteRoot(fileSystem);
+
+    ImmutableMap.Builder<Root, ArtifactRoot> result = ImmutableMap.builder();
+    for (Root packagePathEntry : pkgLocator.getPathEntries()) {
+      result.put(packagePathEntry, ArtifactRoot.asSourceRoot(packagePathEntry));
+    }
+
+    result.put(absoluteRoot, ArtifactRoot.asSourceRoot(absoluteRoot));
+    result.put(externalRoot, ArtifactRoot.asExternalSourceRoot(externalRoot));
+    return result.build();
   }
 
   public SkyframeBuildView getSkyframeBuildView() {

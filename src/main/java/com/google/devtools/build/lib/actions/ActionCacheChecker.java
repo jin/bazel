@@ -24,6 +24,7 @@ import com.google.devtools.build.lib.actions.cache.DigestUtils;
 import com.google.devtools.build.lib.actions.cache.MetadataHandler;
 import com.google.devtools.build.lib.actions.cache.OrderIndependentHasher;
 import com.google.devtools.build.lib.actions.cache.Protos.ActionCacheStatistics.MissReason;
+import com.google.devtools.build.lib.cmdline.LabelConstants;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.Order;
@@ -38,6 +39,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -417,7 +419,6 @@ public class ActionCacheChecker {
     if (entry == null || entry.isCorrupted()) {
       return ImmutableList.of();
     }
-
     List<PathFragment> outputs = new ArrayList<>();
     for (Artifact output : action.getOutputs()) {
       outputs.add(output.getExecPath());
@@ -450,7 +451,7 @@ public class ActionCacheChecker {
         inputArtifacts.add(artifact);
       } else {
         // Remember this execPath, we will try to resolve it as a source artifact.
-        unresolvedPaths.add(execPath);
+        unresolvedPaths.add(execPath.startsWith(LabelConstants.EXTERNAL_REPOS_EXEC_PREFIX) ? execPath.relativeTo(LabelConstants.EXTERNAL_REPOS_EXEC_PREFIX) : execPath);
       }
     }
 

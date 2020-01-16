@@ -285,18 +285,22 @@ public class ProtoCommon {
 
     if (stripImportPrefixAttribute != null || importPrefixAttribute != null) {
       if (stripImportPrefixAttribute == null) {
-        stripImportPrefix = PathFragment.create(ruleContext.getLabel().getWorkspaceRoot());
+        stripImportPrefix = ruleContext.getLabel().getPackageIdentifier().getSourceRoot();
       } else if (stripImportPrefixAttribute.isAbsolute()) {
         stripImportPrefix =
             ruleContext
                 .getLabel()
                 .getPackageIdentifier()
                 .getRepository()
-                .getSourceRoot()
+                .getPathUnderExecRoot()
                 .getRelative(stripImportPrefixAttribute.toRelative());
       } else {
         stripImportPrefix =
-            ruleContext.getPackageDirectory().getRelative(stripImportPrefixAttribute);
+            ruleContext
+                .getLabel()
+                .getPackageIdentifier()
+                .getPathUnderExecRoot()
+                .getRelative(stripImportPrefixAttribute);
       }
 
       if (importPrefixAttribute != null) {
@@ -327,7 +331,7 @@ public class ProtoCommon {
         ruleContext.ruleError(
             String.format(
                 ".proto file '%s' is not under the specified strip prefix '%s'",
-                realProtoSource.getExecPathString(), stripImportPrefix.getPathString()));
+                realProtoSource.getRootRelativePath(), stripImportPrefix.getPathString()));
         continue;
       }
       Pair<PathFragment, Artifact> importsPair =

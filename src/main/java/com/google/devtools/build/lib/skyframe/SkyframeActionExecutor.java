@@ -1301,7 +1301,7 @@ public final class SkyframeActionExecutor {
     PathFragment root = outputFile.getRoot().getRoot().asPath().asFragment();
     Path curDir = context.getPathResolver().convertPath(dir);
     Set<PathFragment> checkDirs = new HashSet<>();
-    while (!curDir.asFragment().equals(root)) {
+    while (!curDir.asFragment().equals(context.getExecRoot().asFragment())) {
       // Fast path: Somebody already checked that this is a regular directory this invocation.
       if (knownRegularDirectories.contains(curDir.asFragment())) {
         return;
