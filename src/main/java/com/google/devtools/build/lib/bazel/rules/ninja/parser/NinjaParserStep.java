@@ -183,7 +183,6 @@ public class NinjaParserStep {
 
     ImmutableSortedMap.Builder<NinjaRuleVariable, NinjaVariableValue> variablesBuilder =
         ImmutableSortedMap.naturalOrder();
-    variablesBuilder.put(NinjaRuleVariable.NAME, NinjaVariableValue.createPlainText(name));
 
     parseExpected(NinjaToken.NEWLINE);
     lexer.interpretPoolAsVariable();
