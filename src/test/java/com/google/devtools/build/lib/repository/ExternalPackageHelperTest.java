@@ -327,7 +327,7 @@ public class ExternalPackageHelperTest extends BuildViewTestCase {
 
   private static Environment createMockEnvironment() throws InterruptedException {
     Environment env = mock(Environment.class);
-    when(env.getValue(PrecomputedValue.PATH_PACKAGE_LOCATOR.getKeyForTesting()))
+    when(env.getValue(PrecomputedValue.PATH_PACKAGE_LOCATOR.getKey()))
         .thenReturn(
             new PrecomputedValue(
                 new PathPackageLocator(
