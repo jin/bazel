@@ -127,7 +127,7 @@ public class SkyfocusModule extends BlazeModule {
       env.getReporter()
           .handle(
               Event.warn(
-                  "Skyfocus: Changes not in the active working set are currently ignored."
+                  "Skyfocus: Changes not in the active working set will cause a build error."
                       + " Run '"
                       + env.getRuntime().getProductName()
                       + " info working_set' to print the set."));
@@ -158,6 +158,10 @@ public class SkyfocusModule extends BlazeModule {
         // Do not replace the active working set.
         break;
     }
+  }
+
+  private boolean skyfocusEnabled() {
+    return commandActuallyBuilds(env.getCommand()) && skyfocusOptions.skyfocusEnabled;
   }
 
   /**
@@ -226,8 +230,7 @@ public class SkyfocusModule extends BlazeModule {
   @Subscribe
   public void onBuildPrecomplete(BuildPrecompleteEvent event)
       throws InterruptedException, AbruptExitException {
-    if (!commandActuallyBuilds(env.getCommand()) || !skyfocusOptions.skyfocusEnabled) {
-      // Skyfocus not enabled, nothing to do here.
+    if (!skyfocusEnabled()) {
       return;
     }
 
@@ -248,6 +251,8 @@ public class SkyfocusModule extends BlazeModule {
     // Shouldn't result in an empty graph.
     Preconditions.checkState(!focusResult.getDeps().isEmpty());
     Preconditions.checkState(!focusResult.getRdeps().isEmpty());
+
+    env.getSkyframeExecutor().setSkyfocusVerificationSet(focusResult.getVerificationSet());
 
     if (skyfocusOptions.dumpKeys) {
       dumpKeys(env.getReporter(), focusResult);
@@ -383,6 +388,11 @@ public class SkyfocusModule extends BlazeModule {
       pos.println();
       pos.println("Deps kept:");
       for (SkyKey key : focusResult.getDeps()) {
+        pos.printf("%s", key.getCanonicalName());
+      }
+      pos.println();
+      pos.println("Verification set:");
+      for (SkyKey key : focusResult.getVerificationSet()) {
         pos.printf("%s", key.getCanonicalName());
       }
       Map<SkyFunctionName, Long> skyKeyCount =
