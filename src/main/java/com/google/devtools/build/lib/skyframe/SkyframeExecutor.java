@@ -447,6 +447,8 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
 
   Duration sourceDiffCheckingDuration = Duration.ofSeconds(-1L);
 
+  private ImmutableSet<String> activeWorkingSet = ImmutableSet.of();
+
   final class PathResolverFactoryImpl implements PathResolverFactory {
     @Override
     public boolean shouldCreatePathResolverForArtifactValues() {
@@ -1300,6 +1302,14 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
 
   public ImmutableSet<Path> getIgnoredPaths() {
     return ignoredPaths;
+  }
+
+  public ImmutableSet<String> getWorkingSet() {
+    return activeWorkingSet;
+  }
+
+  public void setWorkingSet(ImmutableSet<String> workingSet) {
+    activeWorkingSet = workingSet;
   }
 
   protected Differencer.Diff getDiff(
