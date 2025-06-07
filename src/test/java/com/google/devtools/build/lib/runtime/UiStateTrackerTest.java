@@ -1706,4 +1706,94 @@ public class UiStateTrackerTest extends FoundationTestCase {
     output = terminalWriter.getTranscript();
     assertThat(output).contains(" 1 / 1 tests");
   }
+
+  @Test
+  public void testActionColorization() throws IOException, LabelSyntaxException {
+    LoggingTerminalWriter terminalWriter = new LoggingTerminalWriter(false); // discardHighlight = false
+
+    String actionShortName = "ActionShort";
+    String actionWarnName = "ActionWarn";
+    String actionErrorName = "ActionError";
+
+    Action actionShort = mockAction(actionShortName, "out/short");
+    Action actionWarn = mockAction(actionWarnName, "out/warn");
+    Action actionError = mockAction(actionErrorName, "out/error");
+
+    // --- Test Single Action ---
+
+    // Scenario 1: Runtime < 10s (e.g., 5s) - No specific color
+    ManualClock clockShort = new ManualClock();
+    UiStateTracker stateTrackerShort = getUiStateTracker(clockShort, /* targetWidth= */ 100);
+    simulateExecutionPhase(stateTrackerShort);
+    stateTrackerShort.actionStarted(new ActionStartedEvent(actionShort, clockShort.nanoTime()));
+    clockShort.advance(Duration.ofSeconds(5));
+    terminalWriter.reset();
+    stateTrackerShort.writeProgressBar(terminalWriter, false);
+    String outputShort = terminalWriter.getTranscript();
+    assertThat(outputShort).contains("[Prepa] " + actionShortName + "; 5s");
+    assertThat(outputShort).doesNotContain(LoggingTerminalWriter.WARN);
+    assertThat(outputShort).doesNotContain(LoggingTerminalWriter.FAIL);
+
+    // Scenario 2: 10s <= Runtime < 20s (e.g., 15s) - Warn color (Magenta)
+    ManualClock clockWarn = new ManualClock();
+    UiStateTracker stateTrackerWarn = getUiStateTracker(clockWarn, /* targetWidth= */ 100);
+    simulateExecutionPhase(stateTrackerWarn);
+    stateTrackerWarn.actionStarted(new ActionStartedEvent(actionWarn, clockWarn.nanoTime()));
+    clockWarn.advance(Duration.ofSeconds(15));
+    terminalWriter.reset();
+    stateTrackerWarn.writeProgressBar(terminalWriter, false);
+    String outputWarn = terminalWriter.getTranscript();
+    assertThat(outputWarn).contains(LoggingTerminalWriter.WARN + "[Prepa] " + actionWarnName + "; 15s" + LoggingTerminalWriter.NORMAL);
+    assertThat(outputWarn).doesNotContain(LoggingTerminalWriter.FAIL + "[Prepa] " + actionWarnName);
+
+    // Scenario 3: Runtime >= 20s (e.g., 25s) - Error color (Red)
+    ManualClock clockError = new ManualClock();
+    UiStateTracker stateTrackerError = getUiStateTracker(clockError, /* targetWidth= */ 100);
+    simulateExecutionPhase(stateTrackerError);
+    stateTrackerError.actionStarted(new ActionStartedEvent(actionError, clockError.nanoTime()));
+    clockError.advance(Duration.ofSeconds(25));
+    terminalWriter.reset();
+    stateTrackerError.writeProgressBar(terminalWriter, false);
+    String outputError = terminalWriter.getTranscript();
+    assertThat(outputError).contains(LoggingTerminalWriter.FAIL + "[Prepa] " + actionErrorName + "; 25s" + LoggingTerminalWriter.NORMAL);
+    assertThat(outputError).doesNotContain(LoggingTerminalWriter.WARN + "[Prepa] " + actionErrorName);
+
+    // --- Test Multiple Actions (sampleOldestActions) ---
+    ManualClock clockMulti = new ManualClock();
+    UiStateTracker stateTrackerMulti = getUiStateTracker(clockMulti, /* targetWidth= */ 200); // Wider for multiple actions
+    simulateExecutionPhase(stateTrackerMulti);
+    stateTrackerMulti.setProgressSampleSize(3); // Ensure all actions are sampled
+
+    long initialNanoTime = clockMulti.nanoTime();
+
+    stateTrackerMulti.actionStarted(new ActionStartedEvent(actionError, initialNanoTime)); // Error action starts at T=0
+
+    clockMulti.advance(Duration.ofSeconds(10)); // Total time = 10s. Error action is 10s old.
+    stateTrackerMulti.actionStarted(new ActionStartedEvent(actionWarn, clockMulti.nanoTime())); // Warn action starts at T=10s
+
+    clockMulti.advance(Duration.ofSeconds(10)); // Total time = 20s. Error action is 20s old, Warn action is 10s old.
+    stateTrackerMulti.actionStarted(new ActionStartedEvent(actionShort, clockMulti.nanoTime())); // Short action starts at T=20s
+
+    clockMulti.advance(Duration.ofSeconds(5)); // Total time = 25s.
+    // actionError will be 25s old (Error)
+    // actionWarn will be 15s old (Warn)
+    // actionShort will be 5s old (Normal)
+
+    terminalWriter.reset();
+    stateTrackerMulti.writeProgressBar(terminalWriter, false);
+    String outputMultiple = terminalWriter.getTranscript();
+
+    assertThat(outputMultiple).contains("    " + LoggingTerminalWriter.FAIL + "[Prepa] " + actionErrorName + "; 25s" + LoggingTerminalWriter.NORMAL);
+    assertThat(outputMultiple).contains("    " + LoggingTerminalWriter.WARN + "[Prepa] " + actionWarnName + "; 15s" + LoggingTerminalWriter.NORMAL);
+    assertThat(outputMultiple).contains("    " + "[Prepa] " + actionShortName + "; 5s");
+    // Ensure the short action line itself is not colored by WARN or FAIL
+    assertThat(outputMultiple).doesNotContain("    " + LoggingTerminalWriter.WARN + "[Prepa] " + actionShortName + "; 5s");
+    assertThat(outputMultiple).doesNotContain("    " + LoggingTerminalWriter.FAIL + "[Prepa] " + actionShortName + "; 5s");
+  }
+
+  private void activeActionsClear(UiStateTracker stateTracker) {
+    // Helper to clear activeActions for isolated testing. This is a bit of a hack.
+    // In a real scenario, actions complete normally.
+    stateTracker.activeActions.clear();
+  }
 }

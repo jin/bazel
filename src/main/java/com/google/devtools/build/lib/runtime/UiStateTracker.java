@@ -88,6 +88,8 @@ class UiStateTracker {
   private static final GoogleLogger logger = GoogleLogger.forEnclosingClass();
 
   private static final long SHOW_TIME_THRESHOLD_SECONDS = 3;
+  private static final long LONG_ACTION_WARN_THRESHOLD_SECONDS = 10;
+  private static final long LONG_ACTION_ERROR_THRESHOLD_SECONDS = 20;
   private static final String ELLIPSIS = "...";
   private static final String FETCH_PREFIX = "    Fetching ";
   private static final String AND_MORE = " ...";
@@ -995,10 +997,30 @@ class UiStateTracker {
                   : 0);
       terminalWriter
           .newline()
-          .append("    " + describeAction(entry.getValue(), nanoTime, width, toSkip));
+          .append("    ");
+      appendActionDescriptionWithColoring(terminalWriter, entry.getValue(), nanoTime, width, toSkip);
     }
     if (totalCount < actualObservedActiveActionsCount) {
       terminalWriter.append(AND_MORE);
+    }
+  }
+
+  protected void appendActionDescriptionWithColoring(
+      AnsiTerminalWriter terminalWriter,
+      ActionState actionState,
+      long nanoTime,
+      int desiredWidth,
+      Set<Artifact> toSkip)
+      throws IOException {
+    long runtimeSeconds = (nanoTime - actionState.nanoStartTime) / NANOS_PER_SECOND;
+    String description = describeAction(actionState, nanoTime, desiredWidth, toSkip);
+
+    if (runtimeSeconds >= LONG_ACTION_ERROR_THRESHOLD_SECONDS) {
+      terminalWriter.failStatus().append(description).normal();
+    } else if (runtimeSeconds >= LONG_ACTION_WARN_THRESHOLD_SECONDS) {
+      terminalWriter.warnStatus().append(description).normal();
+    } else {
+      terminalWriter.append(description);
     }
   }
 
@@ -1308,28 +1330,26 @@ class UiStateTracker {
         terminalWriter.normal().append("  1 action");
         maybeShowRecentTest(
             terminalWriter, shortVersion, targetWidth - terminalWriter.getPosition());
-        String statusMessage =
-            describeAction(oldestAction, clock.nanoTime(), targetWidth - 4, /*toSkip=*/ null);
-        terminalWriter.normal().newline().append("    " + statusMessage);
+        terminalWriter.normal().newline().append("    ");
+        appendActionDescriptionWithColoring(terminalWriter, oldestAction, clock.nanoTime(), targetWidth - 4, /*toSkip=*/ null);
       } else {
-        String statusMessage =
-            describeAction(
-                oldestAction,
-                clock.nanoTime(),
-                targetWidth - terminalWriter.getPosition() - 1,
-                /*toSkip=*/ null);
-        terminalWriter.normal().append(" " + statusMessage);
+        terminalWriter.normal().append(" ");
+        appendActionDescriptionWithColoring(
+            terminalWriter,
+            oldestAction,
+            clock.nanoTime(),
+            targetWidth - terminalWriter.getPosition() - 1,
+            /*toSkip=*/ null);
       }
     } else {
       if (shortVersion) {
-        String statusMessage =
-            describeAction(
-                oldestAction,
-                clock.nanoTime(),
-                targetWidth - terminalWriter.getPosition(),
-                /*toSkip=*/ null);
-        statusMessage += " ... (" + countActions() + ")";
-        terminalWriter.normal().append(" " + statusMessage);
+        String countSuffix = " ... (" + countActions() + ")";
+        int actionDescWidth =
+            targetWidth - terminalWriter.getPosition() - 1 - countSuffix.length();
+        terminalWriter.normal().append(" ");
+        appendActionDescriptionWithColoring(
+            terminalWriter, oldestAction, clock.nanoTime(), actionDescWidth, /*toSkip=*/ null);
+        terminalWriter.append(countSuffix);
       } else {
         String statusMessage = countActions();
         terminalWriter.normal().append(" " + statusMessage);

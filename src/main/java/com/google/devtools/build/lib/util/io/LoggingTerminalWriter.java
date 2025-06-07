@@ -25,6 +25,7 @@ public class LoggingTerminalWriter implements AnsiTerminalWriter {
   public static final String OK = "[OK]";
   public static final String FAIL = "[FAIL]";
   public static final String NORMAL = "[NORMAL]";
+  public static final String WARN = "[WARN]";
 
   private String transcript;
   private final boolean discardHighlight;
@@ -84,6 +85,15 @@ public class LoggingTerminalWriter implements AnsiTerminalWriter {
   public AnsiTerminalWriter normal() throws IOException {
     if (!discardHighlight) {
       transcript += NORMAL;
+    }
+    return this;
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public AnsiTerminalWriter warnStatus() throws IOException {
+    if (!discardHighlight) {
+      transcript += WARN;
     }
     return this;
   }

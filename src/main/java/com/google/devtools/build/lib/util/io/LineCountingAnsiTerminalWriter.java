@@ -67,6 +67,14 @@ public class LineCountingAnsiTerminalWriter implements AnsiTerminalWriter {
     return this;
   }
 
+  @CanIgnoreReturnValue
+  @Override
+  public AnsiTerminalWriter warnStatus() throws IOException {
+    terminal.textMagenta();
+    terminal.textBold();
+    return this;
+  }
+
   public int getWrittenLines() throws IOException {
     return lineCount;
   }

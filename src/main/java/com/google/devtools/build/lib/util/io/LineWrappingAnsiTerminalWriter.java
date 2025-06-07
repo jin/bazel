@@ -99,4 +99,11 @@ public class LineWrappingAnsiTerminalWriter implements AnsiTerminalWriter {
     terminalWriter.normal();
     return this;
   }
+
+  @CanIgnoreReturnValue
+  @Override
+  public AnsiTerminalWriter warnStatus() throws IOException {
+    terminalWriter.warnStatus();
+    return this;
+  }
 }

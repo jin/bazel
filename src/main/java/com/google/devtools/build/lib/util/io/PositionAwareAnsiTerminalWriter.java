@@ -82,6 +82,13 @@ public class PositionAwareAnsiTerminalWriter implements AnsiTerminalWriter {
     return this;
   }
 
+  @CanIgnoreReturnValue
+  @Override
+  public AnsiTerminalWriter warnStatus() throws IOException {
+    terminalWriter.warnStatus();
+    return this;
+  }
+
   public int getPosition() {
     return position;
   }
