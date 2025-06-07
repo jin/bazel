@@ -611,8 +611,6 @@ public final class DependencyResolver {
    *     {@link UnloadedToolchainContext}s of the underlying target to support aspects toolchains
    *     propagation.
    */
-  // TODO(b/213351014): Make the control flow of this helper function more readable. This will
-  //   involve making a corresponding change to State to match the control flow.
   @Nullable
   public static OrderedSetMultimap<DependencyKind, ConfiguredTargetAndData> computeDependencies(
       State state,
@@ -628,121 +626,154 @@ public final class DependencyResolver {
           ConfiguredValueCreationException,
           AspectCreationException,
           InterruptedException {
-    // Replays stored events unless a Skyframe restart is immediately needed and the events would
-    // be unused anyway.
+    // Return cached result if available
+    if (state.dependencyMap != null) {
+      return state.dependencyMap;
+    }
+
+    // Initialize producer if needed
+    if (state.dependencyMapProducer == null) {
+      initializeDependencyMapProducer(
+          state,
+          configuredTargetKey,
+          aspects,
+          starlarkTransitionProvider,
+          transitionCache,
+          baseTargetPrerequisitesSupplier,
+          baseTargetUnloadedToolchainContexts);
+    }
+
+    // Drive the producer and handle results
     boolean shouldReplayStoredEvents = true;
     try {
-      if (state.dependencyMap != null) {
-        return state.dependencyMap;
-      }
-      if (state.dependencyMapProducer == null) {
-        var ctgValue = state.targetAndConfiguration;
-        DependencyContext dependencyContext = state.dependencyContext;
-        ToolchainCollection<ToolchainContext> toolchainContexts =
-            dependencyContext.toolchainContexts();
-        DependencyResolutionHelpers.DependencyLabels dependencyLabels;
-        try {
-          dependencyLabels =
-              DependencyResolutionHelpers.computeDependencyLabels(
-                  ctgValue,
-                  aspects,
-                  dependencyContext.configConditions().asProviders(),
-                  toolchainContexts,
-                  baseTargetUnloadedToolchainContexts);
-        } catch (DependencyResolutionHelpers.Failure e) {
-          throw handleDependencyRootCauseError(ctgValue, e.getLocation(), e.getMessage(), listener);
-        }
-        state.dependencyMapProducer =
-            new Driver(
-                new DependencyMapProducer(
-                    new PrerequisiteParameters(
-                        configuredTargetKey,
-                        ctgValue.getTarget(),
-                        aspects,
-                        starlarkTransitionProvider,
-                        transitionCache,
-                        toolchainContexts,
-                        dependencyLabels.attributeMap(),
-                        state.transitiveState,
-                        state.storedEvents,
-                        baseTargetPrerequisitesSupplier,
-                        baseTargetUnloadedToolchainContexts),
-                    dependencyLabels.labels(),
-                    (DependencyMapProducer.ResultSink) state));
-      }
-      try {
-        if (state.dependencyMapProducer.drive(env)) {
-          state.dependencyMapProducer = null;
-        }
-      } catch (InterruptedException e) {
-        // In practice, this comes from resolveConfigurations: other InterruptedExceptions are
-        // declared for Skyframe value retrievals, which don't throw in reality.
-        if (state.transitiveState.hasRootCause()) {
-          // Allow caller to throw, don't prioritize interrupt: we may be error bubbling.
-          Thread.currentThread().interrupt();
-          return null;
-        }
-        throw e;
+      if (!driveDependencyMapProducer(state, env)) {
+        shouldReplayStoredEvents = false;
+        return null;
       }
 
-      DependencyError error = state.dependencyMapError;
-      if (error != null) {
-        var ctgValue = state.targetAndConfiguration;
-        switch (error.kind()) {
-          case DEPENDENCY_TRANSITION:
-            {
-              TransitionException e = error.dependencyTransition();
-              throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
-            }
-          case DEPENDENCY_OPTIONS_PARSING:
-            {
-              OptionsParsingException e = error.dependencyOptionsParsing();
-              throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
-            }
-          case MATERIALIZER:
-            {
-              MaterializerException e = error.materializer();
-              throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
-            }
-          case INVALID_VISIBILITY:
-            {
-              InvalidVisibilityDependencyException e = error.invalidVisibility();
-              throw handleDependencyRootCauseError(
-                  ctgValue,
-                  ctgValue.getTarget().getLocation(),
-                  String.format("Label '%s' does not refer to a package group.", e.label()),
-                  listener);
-            }
-          case ASPECT_EVALUATION:
-            throw error.aspectEvaluation();
-          case ASPECT_CREATION:
-            throw error.aspectCreation();
-          case PLATFORM_MAPPING:
-            PlatformMappingException platformMappingException = error.platformMapping();
-            throw new ConfiguredValueCreationException(
-                ctgValue.getTarget(), platformMappingException.getMessage());
-          case INVALID_PLATFORM:
-            InvalidPlatformException invalidPlatformException = error.invalidPlatform();
-            throw new ConfiguredValueCreationException(
-                ctgValue.getTarget(), invalidPlatformException.getMessage());
-          case TRANSITION_CREATION:
-            TransitionCreationException transitionCreationException = error.transitionCreation();
-            throw new ConfiguredValueCreationException(
-                ctgValue.getTarget(), transitionCreationException.getMessage());
-          case BUILD_OPTIONS_SCOPE:
-            BuildOptionsScopeFunctionException buildOptionsScopeFunctionException =
-                error.buildOptionsScope();
-            throw new ConfiguredValueCreationException(
-                ctgValue.getTarget(), buildOptionsScopeFunctionException.getMessage());
-        }
-      }
+      // Handle any errors from the producer
+      handleDependencyMapError(state, listener);
+
+      // Check if we need to wait for more dependencies
       if (!state.transitiveState.hasRootCause() && state.dependencyMap == null) {
-        shouldReplayStoredEvents = false; // Skyframe restart is needed.
+        shouldReplayStoredEvents = false;
+        return null;
       }
+
       return state.dependencyMap;
     } finally {
       if (shouldReplayStoredEvents) {
         state.storedEvents.replayOn(listener);
+      }
+    }
+  }
+
+  private static void initializeDependencyMapProducer(
+      State state,
+      ConfiguredTargetKey configuredTargetKey,
+      ImmutableList<Aspect> aspects,
+      @Nullable StarlarkAttributeTransitionProvider starlarkTransitionProvider,
+      StarlarkTransitionCache transitionCache,
+      @Nullable BaseTargetPrerequisitesSupplier baseTargetPrerequisitesSupplier,
+      @Nullable ToolchainCollection<UnloadedToolchainContext> baseTargetUnloadedToolchainContexts)
+      throws DependencyEvaluationException, InterruptedException {
+    var ctgValue = state.targetAndConfiguration;
+    DependencyContext dependencyContext = state.dependencyContext;
+    ToolchainCollection<ToolchainContext> toolchainContexts = dependencyContext.toolchainContexts();
+    
+    DependencyResolutionHelpers.DependencyLabels dependencyLabels;
+    try {
+      dependencyLabels =
+          DependencyResolutionHelpers.computeDependencyLabels(
+              ctgValue,
+              aspects,
+              dependencyContext.configConditions().asProviders(),
+              toolchainContexts,
+              baseTargetUnloadedToolchainContexts);
+    } catch (DependencyResolutionHelpers.Failure e) {
+      throw handleDependencyRootCauseError(
+          ctgValue, e.getLocation(), e.getMessage(), state.storedEvents);
+    }
+
+    state.dependencyMapProducer =
+        new Driver(
+            new DependencyMapProducer(
+                new PrerequisiteParameters(
+                    configuredTargetKey,
+                    ctgValue.getTarget(),
+                    aspects,
+                    starlarkTransitionProvider,
+                    transitionCache,
+                    toolchainContexts,
+                    dependencyLabels.attributeMap(),
+                    state.transitiveState,
+                    state.storedEvents,
+                    baseTargetPrerequisitesSupplier,
+                    baseTargetUnloadedToolchainContexts),
+                dependencyLabels.labels(),
+                (DependencyMapProducer.ResultSink) state));
+  }
+
+  private static boolean driveDependencyMapProducer(State state, LookupEnvironment env)
+      throws InterruptedException {
+    try {
+      return state.dependencyMapProducer.drive(env);
+    } catch (InterruptedException e) {
+      if (state.transitiveState.hasRootCause()) {
+        // Allow caller to throw, don't prioritize interrupt: we may be error bubbling.
+        Thread.currentThread().interrupt();
+        return false;
+      }
+      throw e;
+    }
+  }
+
+  private static void handleDependencyMapError(State state, ExtendedEventHandler listener)
+      throws ConfiguredValueCreationException, AspectCreationException, DependencyEvaluationException {
+    DependencyError error = state.dependencyMapError;
+    if (error == null) {
+      return;
+    }
+
+    var ctgValue = state.targetAndConfiguration;
+    switch (error.kind()) {
+      case DEPENDENCY_TRANSITION -> {
+        TransitionException e = error.dependencyTransition();
+        throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
+      }
+      case DEPENDENCY_OPTIONS_PARSING -> {
+        OptionsParsingException e = error.dependencyOptionsParsing();
+        throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
+      }
+      case MATERIALIZER -> {
+        MaterializerException e = error.materializer();
+        throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
+      }
+      case INVALID_VISIBILITY -> {
+        InvalidVisibilityDependencyException e = error.invalidVisibility();
+        throw handleDependencyRootCauseError(
+            ctgValue,
+            ctgValue.getTarget().getLocation(),
+            String.format("Label '%s' does not refer to a package group.", e.label()),
+            listener);
+      }
+      case ASPECT_EVALUATION -> throw error.aspectEvaluation();
+      case ASPECT_CREATION -> throw error.aspectCreation();
+      case PLATFORM_MAPPING -> {
+        PlatformMappingException e = error.platformMapping();
+        throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
+      }
+      case INVALID_PLATFORM -> {
+        InvalidPlatformException e = error.invalidPlatform();
+        throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
+      }
+      case TRANSITION_CREATION -> {
+        TransitionCreationException e = error.transitionCreation();
+        throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
+      }
+      case BUILD_OPTIONS_SCOPE -> {
+        BuildOptionsScopeFunctionException e = error.buildOptionsScope();
+        throw new ConfiguredValueCreationException(ctgValue.getTarget(), e.getMessage());
       }
     }
   }
