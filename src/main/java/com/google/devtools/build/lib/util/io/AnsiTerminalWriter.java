@@ -58,10 +58,4 @@ public interface AnsiTerminalWriter {
    * indicating a status or similar.
    */
   AnsiTerminalWriter normal() throws IOException;
-
-  /**
-   * Tell the terminal that the following text will be a warning
-   * status message.
-   */
-  AnsiTerminalWriter warnStatus() throws IOException;
 }

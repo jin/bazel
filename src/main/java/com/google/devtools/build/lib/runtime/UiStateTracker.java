@@ -99,6 +99,11 @@ class UiStateTracker {
   private static final int NANOS_PER_SECOND = 1000000000;
   private static final String URL_PROTOCOL_SEP = "://";
 
+  // ANSI escape codes for coloring
+  private static final String ANSI_RED_BOLD = "\033[1;31m";
+  private static final String ANSI_MAGENTA_BOLD = "\033[1;35m";
+  private static final String ANSI_NORMAL = "\033[0m";
+
   private int sampleSize = 3;
 
   private boolean newStatsSummary = false;
@@ -801,7 +806,7 @@ class UiStateTracker {
   // Describe an action by a string of the desired length; if describing that action includes
   // describing other actions, add those to the to set of actions to skip in further samples of
   // actions.
-  protected String describeAction(
+  private String buildActionDescriptionString(
       ActionState actionState, long nanoTime, int desiredWidth, Set<Artifact> toSkip) {
     ActionExecutionMetadata action = actionState.action;
     if (action.getOwner() != null
@@ -915,6 +920,25 @@ class UiStateTracker {
     return prefix + message + postfix;
   }
 
+  protected void describeAction(
+      AnsiTerminalWriter terminalWriter,
+      ActionState actionState,
+      long nanoTime,
+      int desiredWidth,
+      Set<Artifact> toSkip)
+      throws IOException {
+    String description = buildActionDescriptionString(actionState, nanoTime, desiredWidth, toSkip);
+    long runtimeSeconds = (nanoTime - actionState.nanoStartTime) / NANOS_PER_SECOND;
+
+    if (runtimeSeconds >= LONG_ACTION_ERROR_THRESHOLD_SECONDS) {
+      terminalWriter.append(ANSI_RED_BOLD).append(description).append(ANSI_NORMAL);
+    } else if (runtimeSeconds >= LONG_ACTION_WARN_THRESHOLD_SECONDS) {
+      terminalWriter.append(ANSI_MAGENTA_BOLD).append(description).append(ANSI_NORMAL);
+    } else {
+      terminalWriter.append(description);
+    }
+  }
+
   protected ActionState getOldestAction() {
     long minStart = Long.MAX_VALUE;
     ActionState result = null;
@@ -998,29 +1022,10 @@ class UiStateTracker {
       terminalWriter
           .newline()
           .append("    ");
-      appendActionDescriptionWithColoring(terminalWriter, entry.getValue(), nanoTime, width, toSkip);
+      describeAction(terminalWriter, entry.getValue(), nanoTime, width, toSkip);
     }
     if (totalCount < actualObservedActiveActionsCount) {
       terminalWriter.append(AND_MORE);
-    }
-  }
-
-  protected void appendActionDescriptionWithColoring(
-      AnsiTerminalWriter terminalWriter,
-      ActionState actionState,
-      long nanoTime,
-      int desiredWidth,
-      Set<Artifact> toSkip)
-      throws IOException {
-    long runtimeSeconds = (nanoTime - actionState.nanoStartTime) / NANOS_PER_SECOND;
-    String description = describeAction(actionState, nanoTime, desiredWidth, toSkip);
-
-    if (runtimeSeconds >= LONG_ACTION_ERROR_THRESHOLD_SECONDS) {
-      terminalWriter.failStatus().append(description).normal();
-    } else if (runtimeSeconds >= LONG_ACTION_WARN_THRESHOLD_SECONDS) {
-      terminalWriter.warnStatus().append(description).normal();
-    } else {
-      terminalWriter.append(description);
     }
   }
 
@@ -1331,10 +1336,10 @@ class UiStateTracker {
         maybeShowRecentTest(
             terminalWriter, shortVersion, targetWidth - terminalWriter.getPosition());
         terminalWriter.normal().newline().append("    ");
-        appendActionDescriptionWithColoring(terminalWriter, oldestAction, clock.nanoTime(), targetWidth - 4, /*toSkip=*/ null);
+        describeAction(terminalWriter, oldestAction, clock.nanoTime(), targetWidth - 4, /*toSkip=*/ null);
       } else {
         terminalWriter.normal().append(" ");
-        appendActionDescriptionWithColoring(
+        describeAction(
             terminalWriter,
             oldestAction,
             clock.nanoTime(),
@@ -1347,7 +1352,7 @@ class UiStateTracker {
         int actionDescWidth =
             targetWidth - terminalWriter.getPosition() - 1 - countSuffix.length();
         terminalWriter.normal().append(" ");
-        appendActionDescriptionWithColoring(
+        describeAction(
             terminalWriter, oldestAction, clock.nanoTime(), actionDescWidth, /*toSkip=*/ null);
         terminalWriter.append(countSuffix);
       } else {

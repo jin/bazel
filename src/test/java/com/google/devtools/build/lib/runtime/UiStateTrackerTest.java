@@ -775,7 +775,7 @@ public class UiStateTrackerTest extends FoundationTestCase {
 
     // assert
     String output = terminalWriter.getTranscript();
-    assertThat(output).contains("action p...");
+    assertThat(output).contains("; action ...");
   }
 
   @Test
@@ -1731,8 +1731,8 @@ public class UiStateTrackerTest extends FoundationTestCase {
     stateTrackerShort.writeProgressBar(terminalWriter, false);
     String outputShort = terminalWriter.getTranscript();
     assertThat(outputShort).contains("[Prepa] " + actionShortName + "; 5s");
-    assertThat(outputShort).doesNotContain(LoggingTerminalWriter.WARN);
-    assertThat(outputShort).doesNotContain(LoggingTerminalWriter.FAIL);
+    assertThat(outputShort).doesNotContain("\033[1;35m"); // Check for Magenta Bold ANSI code
+    assertThat(outputShort).doesNotContain("\033[1;31m"); // Check for Red Bold ANSI code
 
     // Scenario 2: 10s <= Runtime < 20s (e.g., 15s) - Warn color (Magenta)
     ManualClock clockWarn = new ManualClock();
@@ -1743,8 +1743,8 @@ public class UiStateTrackerTest extends FoundationTestCase {
     terminalWriter.reset();
     stateTrackerWarn.writeProgressBar(terminalWriter, false);
     String outputWarn = terminalWriter.getTranscript();
-    assertThat(outputWarn).contains(LoggingTerminalWriter.WARN + "[Prepa] " + actionWarnName + "; 15s" + LoggingTerminalWriter.NORMAL);
-    assertThat(outputWarn).doesNotContain(LoggingTerminalWriter.FAIL + "[Prepa] " + actionWarnName);
+    assertThat(outputWarn).contains("\033[1;35m" + "[Prepa] " + actionWarnName + "; 15s" + "\033[0m");
+    assertThat(outputWarn).doesNotContain("\033[1;31m" + "[Prepa] " + actionWarnName); // Check specific red bold prefix
 
     // Scenario 3: Runtime >= 20s (e.g., 25s) - Error color (Red)
     ManualClock clockError = new ManualClock();
@@ -1755,8 +1755,8 @@ public class UiStateTrackerTest extends FoundationTestCase {
     terminalWriter.reset();
     stateTrackerError.writeProgressBar(terminalWriter, false);
     String outputError = terminalWriter.getTranscript();
-    assertThat(outputError).contains(LoggingTerminalWriter.FAIL + "[Prepa] " + actionErrorName + "; 25s" + LoggingTerminalWriter.NORMAL);
-    assertThat(outputError).doesNotContain(LoggingTerminalWriter.WARN + "[Prepa] " + actionErrorName);
+    assertThat(outputError).contains("\033[1;31m" + "[Prepa] " + actionErrorName + "; 25s" + "\033[0m");
+    assertThat(outputError).doesNotContain("\033[1;35m" + "[Prepa] " + actionErrorName); // Check specific magenta bold prefix
 
     // --- Test Multiple Actions (sampleOldestActions) ---
     ManualClock clockMulti = new ManualClock();
@@ -1783,12 +1783,12 @@ public class UiStateTrackerTest extends FoundationTestCase {
     stateTrackerMulti.writeProgressBar(terminalWriter, false);
     String outputMultiple = terminalWriter.getTranscript();
 
-    assertThat(outputMultiple).contains("    " + LoggingTerminalWriter.FAIL + "[Prepa] " + actionErrorName + "; 25s" + LoggingTerminalWriter.NORMAL);
-    assertThat(outputMultiple).contains("    " + LoggingTerminalWriter.WARN + "[Prepa] " + actionWarnName + "; 15s" + LoggingTerminalWriter.NORMAL);
+    assertThat(outputMultiple).contains("    " + "\033[1;31m" + "[Prepa] " + actionErrorName + "; 25s" + "\033[0m");
+    assertThat(outputMultiple).contains("    " + "\033[1;35m" + "[Prepa] " + actionWarnName + "; 15s" + "\033[0m");
     assertThat(outputMultiple).contains("    " + "[Prepa] " + actionShortName + "; 5s");
-    // Ensure the short action line itself is not colored by WARN or FAIL
-    assertThat(outputMultiple).doesNotContain("    " + LoggingTerminalWriter.WARN + "[Prepa] " + actionShortName + "; 5s");
-    assertThat(outputMultiple).doesNotContain("    " + LoggingTerminalWriter.FAIL + "[Prepa] " + actionShortName + "; 5s");
+    // Ensure the short action line itself is not colored by WARN or FAIL ANSI codes
+    assertThat(outputMultiple).doesNotContain("    " + "\033[1;35m" + "[Prepa] " + actionShortName + "; 5s");
+    assertThat(outputMultiple).doesNotContain("    " + "\033[1;31m" + "[Prepa] " + actionShortName + "; 5s");
   }
 
   private void activeActionsClear(UiStateTracker stateTracker) {

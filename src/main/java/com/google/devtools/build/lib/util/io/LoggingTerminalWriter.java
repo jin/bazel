@@ -15,6 +15,7 @@ package com.google.devtools.build.lib.util.io;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.io.IOException;
+import java.util.regex.Pattern;
 
 /**
  * An {@link AnsiTerminalWriter} that just generates a transcript of the events it was exposed of.
@@ -25,10 +26,13 @@ public class LoggingTerminalWriter implements AnsiTerminalWriter {
   public static final String OK = "[OK]";
   public static final String FAIL = "[FAIL]";
   public static final String NORMAL = "[NORMAL]";
-  public static final String WARN = "[WARN]";
 
   private String transcript;
   private final boolean discardHighlight;
+
+  // Regex to match ANSI escape codes - now a pre-compiled Pattern
+  private static final Pattern ANSI_ESCAPE_PATTERN =
+      Pattern.compile("\\x1B\\x5B[;0-9]*m"); // Hex for ESC, Hex for [, then params, then m
 
   public LoggingTerminalWriter(boolean discardHighlight) {
     this.transcript = "";
@@ -47,7 +51,12 @@ public class LoggingTerminalWriter implements AnsiTerminalWriter {
   @CanIgnoreReturnValue
   @Override
   public AnsiTerminalWriter append(String text) throws IOException {
-    transcript += text;
+    if (discardHighlight) {
+      // Use the pre-compiled pattern
+      transcript += ANSI_ESCAPE_PATTERN.matcher(text).replaceAll("");
+    } else {
+      transcript += text;
+    }
     return this;
   }
 
@@ -85,15 +94,6 @@ public class LoggingTerminalWriter implements AnsiTerminalWriter {
   public AnsiTerminalWriter normal() throws IOException {
     if (!discardHighlight) {
       transcript += NORMAL;
-    }
-    return this;
-  }
-
-  @CanIgnoreReturnValue
-  @Override
-  public AnsiTerminalWriter warnStatus() throws IOException {
-    if (!discardHighlight) {
-      transcript += WARN;
     }
     return this;
   }
