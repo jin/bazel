@@ -215,7 +215,132 @@ bytes weaken dedup and can mask key bugs. **Work:** make frontier traversal and
 serialized output deterministic; add a byte-stability test (serialize twice,
 compare).
 
-## 6. Work items for SPEED
+## 6. Versioning: mapping VCS state to monotone Longs
+
+Cross-machine correctness rests entirely on a **version number**: a writer tags
+each cached node with the version at which it was computed, and a reader decides
+a hit is valid only by comparing versions. This section captures the contract
+that mapping must satisfy, what is stubbed today, and the concrete work to make
+it real for git (and other external VCS).
+
+### 6.1 Why a monotone total order is required (the consumer contract)
+
+`VersionedChanges` (`VersionedChanges.java:21-65`) does **range arithmetic over
+a total order**. Each cached node tracks:
+
+- **MTSV** (max transitive source version) — lowest version at which the node
+  has its current value; the canonical lower bound of validity.
+- **VH** (validity horizon) — highest version at which the node is *known*
+  valid.
+- **VC** (client version) — the version the *reader* is synced to.
+
+The validity rule is: *a cached node is valid for a reader at VC iff none of its
+file/listing dependencies changed in the range `(VH, VC]`*, implemented as a
+binary search `findMinimumVersionGreaterThanOrEqualTo(versions, VH + 1)`
+(`VersionedChanges.java:128-182`) over a sorted `int[]` of versions at which each
+path changed. This is correct **only** if versions satisfy:
+
+1. **Monotone:** a state causally later than another has a strictly larger
+   number (descendant commit ⇒ larger version).
+2. **Stable / global:** the same committed state yields the same number on every
+   machine, so a writer's MTSV and a reader's VC are comparable. (Rules out
+   wall-clock time and purely local counters for *committed* state.)
+3. **Representable:** per-path change versions are stored as `int[]`, so they
+   must fit `int` even though the workspace version is a `long`.
+
+### 6.2 What exists today (stubbed)
+
+Two interfaces define the boundary; both return sentinels in OSS:
+
+- `WorkspaceInfoFromDiff` (`WorkspaceInfoFromDiff.java`) — per-invocation
+  workspace version: `getEvaluatingVersion()` (default `Long.MIN_VALUE`) and
+  `getSnapshot()` (default empty). Both carry
+  `TODO: b/367284400 - handle this for external version control systems`.
+- `LongVersionGetter` (`LongVersionGetter.java`) — per-path "when did this last
+  change": `getFilePathOrSymlinkVersion`, `getDirectoryListingVersion`,
+  `getNonexistentPathVersion`, with sentinels `CURRENT_VERSION = Long.MAX_VALUE`
+  (changed in the live client) and `MINIMAL = -1` (never existed / never
+  changed).
+
+A concrete `DiffAwareness`/VCS plugin is expected to supply these; none ships
+here, so every reader currently looks unversioned and the `VersionedChanges`
+machinery cannot safely decide hits.
+
+### 6.3 V1. Git hash → monotone `long` (baseline version)
+
+A git SHA is content-addressed and **unordered**, and history is a DAG, so the
+hash itself cannot be the version. The version must be the commit's **position
+in a linearized history**:
+
+- **First-parent / mainline depth** (`git rev-list --count`, a commit index):
+  on a linear trunk this is a perfect monotone total order (the analog of a
+  Piper CL number, which is why the internal implementation maps cleanly).
+- **Commit generation numbers** (commit-graph generation / topo order) with a
+  deterministic tiebreak when DAG-awareness is needed. Pure topological order is
+  not *total* across branches, so constrain to a tracked mainline or use a
+  server-assigned sequence (submit queue / CI) recorded in a
+  `commit_sha → seq` side table for stability across rebases/merges.
+
+Per-file versions are then "the trunk sequence number of the commit that last
+touched this path," feeding `registerFileChange(path, version)` and
+`getFilePathOrSymlinkVersion`.
+
+**Work:** implement a git-backed `WorkspaceInfoFromDiff` +`LongVersionGetter`
+(or `DiffAwareness`) producing versions that satisfy §6.1 (1)-(3); choose and
+document the linearization strategy and its behavior on merges/branch switches.
+**Acceptance:** the same committed tree yields identical versions on two
+machines; a writer at version `N` produces entries a reader synced at `≥ N`
+reuses; changing a single file advances exactly that path's version.
+
+### 6.4 V2. Snapshot identity within a baseline
+
+A **baseline** is a committed revision (the monotone long); a **snapshot** is
+the developer's *uncommitted* edits on top of it. Uncommitted state has no place
+in the global depot order and is modeled in two complementary ways:
+
+- **As identity — `ClientId`** (`ClientId.java`):
+  `SnapshotClientId(String workspaceId, int snapshotVersion)` for a dirty client
+  vs. `LongVersionClientId(long evaluatingVersion)` for a clean synced client.
+  `snapshotVersion` is *"a monotonically incrementing number of the snapshot"* —
+  a **local** counter bumped as the working tree's edits change (monotone only
+  within that `workspaceId`). `RemoteAnalysisCacheFactory` selects via
+  `getSnapshot().orElse(new LongVersionClientId(evaluatingVersion))`
+  (`RemoteAnalysisCacheFactory.java:142-145`). The `ClientId` is the
+  "cache the client's own state" key for invalidation: in
+  `AnalysisCacheInvalidator.lookupKeysToInvalidate`
+  (`AnalysisCacheInvalidator.java:100-112`), an unchanged `FrontierNodeVersion`
+  plus an equal `ClientId` ⇒ invalidate nothing; a bumped snapshot ⇒ re-probe
+  only the changed keys, preserving the rest of the baseline's cache.
+- **As change records — sentinels:** locally-edited files are injected as
+  "changed *after* everything in the depot" so they always win invalidation but
+  never collide with committed versions. `VersionedChanges` registers
+  `clientFileChanges` at `CLIENT_CHANGE = Integer.MAX_VALUE - 1`
+  (`VersionedChanges.java:80, 96-100`), and `LongVersionGetter.CURRENT_VERSION
+  = Long.MAX_VALUE` plays the same role per path.
+
+**Work:** populate `SnapshotClientId` (stable `workspaceId`, monotone local
+`snapshotVersion`) and the client file-change list from the git working tree
+(staged + unstaged + untracked), and wire them through to `VersionedChanges`.
+**Acceptance:** with local edits, only locally-touched paths are re-validated
+against the baseline cache; two successive builds with no new edits report an
+equal `ClientId` and invalidate nothing; committing the edits transitions the
+client to a clean `LongVersionClientId` at the new baseline.
+
+### 6.5 V3. Int-width and overflow safety
+
+Workspace versions are `long` but per-path change versions live in `int[]`
+(`VersionedChanges`), and `CLIENT_CHANGE`/`NO_MATCH` consume the top of the
+`int` range. **Work:** define the narrowing from depot `long` to the stored
+`int` (offset/rebasing scheme, or widen storage), and prove it cannot collide
+with the reserved sentinels or overflow on long-lived repositories.
+**Acceptance:** a repository whose trunk sequence exceeds `int` range still
+produces correct, sentinel-safe comparisons.
+
+This versioning work is a prerequisite for genuine cross-machine hits and is
+tightly coupled to C1 (clean-node upload), C2 (key completeness), and C4
+(invalidation). It belongs in **Phase 1**.
+
+## 7. Work items for SPEED
 
 ### S1. Selective upload (also a correctness item, C1)
 Avoid re-uploading unchanged nodes every build; only upload deltas. Directly
@@ -249,7 +374,7 @@ discarding safe for all target kinds (it touches
 `b/390533627`-style executor concerns in `RemoteAnalysisCacheDeps.java:134`);
 graduate the flag.
 
-## 7. Observability, UX, and stabilization
+## 8. Observability, UX, and stabilization
 
 - **O1. Flag graduation & docs.** Every option is `UNDOCUMENTED`
   (`RemoteAnalysisCachingOptions.java`). Define the supported surface, write
@@ -263,7 +388,7 @@ graduate the flag.
 - **O4. Failure-mode UX.** Metadata-write failures are warnings; ensure all
   non-fatal degradations are clearly distinguished from incorrect results.
 
-## 8. Testing strategy
+## 9. Testing strategy
 
 1. **Persistent backend integration tests** (replace in-memory-only coverage):
    upload on one server instance, download on another.
@@ -276,19 +401,24 @@ graduate the flag.
 5. **Visibility test (C3):** failures never served from cache.
 6. **Benchmark suite (S3):** tracked over time.
 7. **Determinism test (C6):** stable serialized bytes.
+8. **Versioning tests (V1-V3):** same committed tree ⇒ identical versions across
+   machines; single-file edit advances exactly one path's version; dirty
+   workspace re-validates only touched paths and reports a stable `ClientId`
+   across no-op rebuilds; `int` narrowing is sentinel-safe and overflow-safe.
 
-## 9. Suggested phasing
+## 10. Suggested phasing
 
 - **Phase 0 — Make it real (functional):** W1, W2, W5. A persistent store plus a
   working lookup client unlock genuine cross-invocation hits.
-- **Phase 1 — Make it safe (correctness):** C1, C2, C3, C4 with the testing in
-  §8. Do not enable by default before this phase passes.
+- **Phase 1 — Make it safe (correctness):** V1-V3 (versioning) and C1, C2, C3,
+  C4 with the testing in §9. Cross-machine hits are impossible without V1-V3, so
+  they gate this phase. Do not enable by default before this phase passes.
 - **Phase 2 — Make it fast:** S1, S2, S3, S4; W3/W4 for proxy/metadata
   deployments.
 - **Phase 3 — Productionize:** S5 (memory), O1–O4 (flags/docs/telemetry),
   C5/C6 hardening.
 
-## 10. Key references
+## 11. Key references
 
 - `src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis/`
   — `RemoteAnalysisCacheFactory.java`, `RemoteAnalysisCacheManager.java`,
@@ -302,6 +432,10 @@ graduate the flag.
   `InMemoryFingerprintValueStore.java`, `FingerprintValueStore.java`.
 - `src/main/java/com/google/devtools/build/lib/skybridge/SkybridgeInterface.java`
   — the SC/LC boundary annotation.
+- Versioning: `VersionedChanges.java`, `ClientId.java`,
+  `src/main/java/com/google/devtools/build/lib/skyframe/WorkspaceInfoFromDiff.java`,
+  `src/main/java/com/google/devtools/build/lib/versioning/LongVersionGetter.java`,
+  `FrontierNodeVersion.java`.
 - `src/main/java/com/google/devtools/build/lib/buildtool/BuildTool.java`
   — upload/download orchestration and metadata write.
 - Tests under
@@ -320,5 +454,7 @@ graduate the flag.
   (`RemoteAnalysisCacheDeps.java:134`).
 - `b/364831651` — determinism / traversal scaling
   (`FileOpNodeMemoizingLookup.java`, `VersionedChanges.java:89`).
+- `b/367284400` — version derivation for external version control systems
+  (`WorkspaceInfoFromDiff.java:24,29`).
 </content>
 </invoke>
