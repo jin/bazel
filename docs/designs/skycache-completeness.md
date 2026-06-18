@@ -71,6 +71,50 @@ Skycache"* (`RemoteAnalysisCachingServicesSupplier.java`). The following are
   there is an explicit `TODO: b/358347099 - use a persistent store`
   (`SerializationModule.java:96`).
 
+### 2.3 The AnalysisCacheService backend (LC side) — OUT OF TREE
+
+The concrete implementation behind `RemoteAnalysisCacheClient` /
+`RemoteAnalysisMetadataWriter` is the **AnalysisCacheService**, a server that
+lives on the LC side of the Skybridge boundary and is **not present in this
+repository**. It is what `--experimental_analysis_cache_service` /
+`--experimental_remote_analysis_write_proxy` address, and what
+`SkyValueRetriever.tryRetrieve` and `AnalysisCacheInvalidator` actually talk to.
+Its responsibilities, from the known design:
+
+1. **Colocated with the (in-memory) KV store.** The service is co-located with
+   the content-addressable blob store (`FingerprintValueStore`, today an
+   in-memory KV; see W1). Lookups for a SkyKey and fetches of its serialized
+   blob are served from the same locus, so a `lookup` can resolve both
+   "does an entry exist for this key+version" and the bytes without a second hop.
+2. **VCS-aware change discovery.** The service can query a **VCS service** for
+   the exact set of changes in the requesting Bazel client's workspace —
+   **including uncommitted edits** — rather than relying on the client to
+   enumerate them. This is the backend counterpart of §6: it supplies the depot
+   changes in the range `(VH, VC]` and the client (uncommitted) changes that
+   `VersionedChanges` needs to evaluate node validity. It is also where the
+   git-hash → monotone-version mapping (V1) and snapshot identity (V2) are
+   ultimately resolved.
+3. **Server-side invalidation of SkyKey lookups.** Using (2), the service
+   invalidates cache lookups for SkyKeys whose dependencies changed, so a
+   `lookup` returns a miss (with a `MissReason`) for entries that are no longer
+   valid for this client's version/snapshot. This is the server half of
+   `AnalysisCacheInvalidator` (`lookupKeysToInvalidate`), which on the client
+   side reconciles the result against `RemoteAnalysisCachingServerState`.
+4. **Whole-build hit feasibility check.** Before/around analysis, the service can
+   determine whether the current build can score **any** cache hits at all by
+   checking for `FrontierNodeVersion` matches in the metadata table — the
+   backing of `RemoteAnalysisCacheClient.lookupTopLevelTargets(...)` and the
+   `TopLevelTargetsMatchStatus` reported in `Stats.matchStatus`. A non-match lets
+   Bazel bail out early (cf. `bailOutDueToMissingFingerprint()`) instead of
+   issuing per-key lookups that are guaranteed to miss.
+
+Implication: a complete Skycache requires not just the client stubs (W2/W3) but
+this server (or an OSS-suitable equivalent) providing a persistent KV store
+(W1), a VCS-change source (§6), per-key invalidation, and the
+`FrontierNodeVersion` feasibility index. The work items below are written so the
+client side is agnostic to whether this backend is the production
+AnalysisCacheService or a reference implementation (W5).
+
 ## 3. Gap analysis
 
 | Capability | State | Blocking? |
@@ -85,6 +129,7 @@ Skycache"* (`RemoteAnalysisCachingServicesSupplier.java`). The following are
 | `--experimental_skycache_minimize_memory` | Marked "DO NOT USE… does not work with every target" | Quality |
 | Upload selectivity (only freshly-computed nodes) | `TODO: b/371508153` | Speed/correctness |
 | Docs / flag stabilization | All flags `UNDOCUMENTED`, experimental | UX |
+| AnalysisCacheService backend (LC) — see §2.3 | **Out of tree** | Yes — KV store, VCS-change source, per-key invalidation, feasibility index |
 
 ## 4. Work items for a COMPLETE implementation (functional)
 
@@ -105,7 +150,8 @@ Without persistence, no caching benefit survives a single invocation.
 build by machine B can fetch and deserialize; survives server restart.
 
 ### W2. Production `RemoteAnalysisCacheClient`
-**Why:** `DOWNLOAD`/`BIDI` are dead without it (null-client fallback path).
+**Why:** `DOWNLOAD`/`BIDI` are dead without it (null-client fallback path). This
+is the client side of the AnalysisCacheService backend (§2.3).
 **Work:**
 - Implement `lookup(byte[] key)` returning `ListenableFuture<LookupResult>`,
   including the `missReason` plumbing already consumed by
